@@ -47,13 +47,21 @@ func (t *bm) Generate(in *plugin.CodeGeneratorRequest) *plugin.CodeGeneratorResp
 func (t *bm) generateForFile(file *descriptor.FileDescriptorProto) *plugin.CodeGeneratorResponse_File {
 	resp := new(plugin.CodeGeneratorResponse_File)
 
+	validateComment := make(map[string]string)
+	for _, i2 := range file.MessageType {
+		for _, i3 := range i2.Field {
+			comment := getValidateComment(i3)
+			validateComment[i2.GetName()] = comment
+		}
+	}
+
 	t.generateFileHeader(file, t.GenPkgName)
 	t.generateImports(file)
 	t.generatePathConstants(file)
 	count := 0
 	for i, service := range file.Service {
 		count += t.generateBMInterface(file, service)
-		t.generateBMRoute(file, service, i)
+		t.generateBMRoute(file, service, i, validateComment)
 	}
 
 	resp.Name = proto.String(naming.GenFileName(file, ".fiber.go"))
@@ -143,7 +151,7 @@ func (t *bm) sectionComment(sectionTitle string) {
 func (t *bm) generateBMRoute(
 	file *descriptor.FileDescriptorProto,
 	service *descriptor.ServiceDescriptorProto,
-	index int) {
+	index int, validateComment map[string]string) {
 	// old mode is generate xx.route.go in the http pkg
 	// new mode is generate route code in the same .bm.go
 	// route rule /x{department}/{project-name}/{path_prefix}/method_name
@@ -195,6 +203,14 @@ func (t *bm) generateBMRoute(
 		methName := naming.MethodName(method)
 		inputType := t.GoTypeName(method.GetInputType())
 
+		needVaild := false
+
+		if v, ok := validateComment[inputType]; ok {
+			if v == "required" {
+				needVaild = true
+			}
+		}
+
 		routeName := utils.LcFirst(utils.CamelCase(servName) +
 			utils.CamelCase(methName))
 
@@ -211,9 +227,11 @@ func (t *bm) generateBMRoute(
 		t.P("		return err")
 		t.P("	}")
 
-		t.P(fmt.Sprintf("	if err := %sValidater(p); err != nil {", utils.CamelCase(servName)))
-		t.P("		return err")
-		t.P("	}")
+		if needVaild {
+			t.P(fmt.Sprintf("	if err := %sValidater(p); err != nil {", utils.CamelCase(servName)))
+			t.P("		return err")
+			t.P("	}")
+		}
 
 		t.P(fmt.Sprintf("	resp, err := %sSvc.%s(c.UserContext(), p)", utils.CamelCase(servName), methName))
 		t.P("	if err != nil {")
@@ -228,27 +246,7 @@ func (t *bm) generateBMRoute(
 		t.P("	return err")
 		t.P("}")
 		t.P()
-		//requestBinding := ""
-		//if t.hasHeaderTag(t.Reg.MessageDefinition(method.GetInputType())) {
-		//	requestBinding = ", binding.Request"
-		//}
-		//t.P(`	if err := c.BindWith(p, binding.Default(c.Request.Method, c.Request.Header.Get("Content-Type"))` +
-		//	requestBinding + `); err != nil {`)
-		//t.P(`		return`)
-		//t.P(`	}`)
-		//t.P(`	resp, err := `, svcName, `.`, methName, `(c, p)`)
-		//t.P(`	c.JSON(resp, err)`)
-		//t.P(`}`)
-		//t.P(``)
 	}
-
-	// generate route group
-	var midList []string
-	for m := range allMidwareMap {
-		midList = append(midList, m+" bm.HandlerFunc")
-	}
-
-	sort.Strings(midList)
 
 	// 注册老的路由的方法
 	if isLegacyPkg {
@@ -359,4 +357,27 @@ func (t *bm) generateInterfaceMethod(file *descriptor.FileDescriptorProto,
 		t.P(fmt.Sprintf(`	%s(ctx context.Context, req *%s) (resp *%s, err error)`,
 			methName, inputType, outputType))
 	}
+}
+
+func getValidateComment(field *descriptor.FieldDescriptorProto) string {
+	var (
+		tags []reflect.StructTag
+	)
+	//get required info from gogoproto.moretags
+	moretags := tag.GetMoreTags(field)
+	if moretags != nil {
+		tags = []reflect.StructTag{reflect.StructTag(*moretags)}
+	}
+	validateTag := tag.GetTagValue("validate", tags)
+
+	//// trim
+	//regStr := []string{
+	//	"required *,*",
+	//	"omitempty *,*",
+	//}
+	//for _, v := range regStr {
+	//	re, _ := regexp.Compile(v)
+	//	validateTag = re.ReplaceAllString(validateTag, "")
+	//}
+	return validateTag
 }

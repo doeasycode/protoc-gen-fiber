@@ -75,7 +75,7 @@ func writeJson(req *plugin.CodeGeneratorRequest) {
 
 func readGenRequestTest() *plugin.CodeGeneratorRequest {
 
-	file, err := os.OpenFile("/Applications/www/go/src/protoc-gen-fiber/Stdin.txt", os.O_RDWR|os.O_CREATE, 0766) //打开文件
+	file, err := os.OpenFile("d:/www/go/src/golang_demo/Stdout.txt", os.O_RDWR|os.O_CREATE, 0766) //打开文件
 	if err != nil {
 		Error(err, "OpenFile")
 	}
