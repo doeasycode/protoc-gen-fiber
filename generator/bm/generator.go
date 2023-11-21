@@ -155,6 +155,7 @@ func (t *bm) generateBMRoute(
 	t.P(`var (`)
 	t.P(`	`, svcName, ` `, servName, `FiberServer`)
 	t.P(`	`, servName, `Marshaller`, ` func(message proto.Message) ([]byte, error)`)
+	t.P(`	`, servName, `Validater`, ` func(message proto.Message) (error)`)
 	t.P(`)`)
 
 	type methodInfo struct {
@@ -209,6 +210,11 @@ func (t *bm) generateBMRoute(
 		t.P("	if err := c.BodyParser(p); err != nil {")
 		t.P("		return err")
 		t.P("	}")
+
+		t.P(fmt.Sprintf("	if err := %sValidater(p); err != nil {", utils.CamelCase(servName)))
+		t.P("		return err")
+		t.P("	}")
+
 		t.P(fmt.Sprintf("	resp, err := %sSvc.%s(c.UserContext(), p)", utils.CamelCase(servName), methName))
 		t.P("	if err != nil {")
 		t.P("		return err")
@@ -275,9 +281,10 @@ func (t *bm) generateBMRoute(
 		// 新的注册路由的方法
 		var bmFuncName = fmt.Sprintf("Register%sFiberServer", servName)
 		t.P(`// `, bmFuncName, ` Register the fiber route`)
-		t.P(`func `, bmFuncName, fmt.Sprintf(`(e *fiber.App, server %sFiberServer, mr func(message proto.Message) ([]byte, error)) {`, utils.CamelCase(servName)))
+		t.P(`func `, bmFuncName, fmt.Sprintf(`(e *fiber.App, server %sFiberServer, mr func(message proto.Message) ([]byte, error) ,valid func(message proto.Message) error) {`, utils.CamelCase(servName)))
 		t.P(svcName, ` = server`)
 		t.P(fmt.Sprintf(`	%sMarshaller = mr`, utils.CamelCase(servName)))
+		t.P(fmt.Sprintf(`	%sValidater = valid`, utils.CamelCase(servName)))
 		for _, methInfo := range methList {
 			t.P(`e.`, helper.UcFirst(strings.ToLower(methInfo.apiInfo.HttpMethod)), `("`, methInfo.apiInfo.NewPath, `",`, methInfo.routeFuncName, ` )`)
 		}
