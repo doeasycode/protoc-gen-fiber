@@ -59,7 +59,7 @@ func readGenRequest() *plugin.CodeGeneratorRequest {
 		Fail("no files to generate")
 	}
 
-	writeJson(req)
+	//writeJson(req)
 	return req
 }
 
