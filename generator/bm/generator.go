@@ -238,7 +238,7 @@ func (t *bm) generateBMRoute(
 		t.P("		return err")
 		t.P("	}")
 		t.P(fmt.Sprintf("	return %sWriter(c,resp)", utils.CamelCase(servName)))
-		t.P()
+		t.P("}")
 	}
 
 	// 注册老的路由的方法
@@ -274,7 +274,7 @@ func (t *bm) generateBMRoute(
 		t.P(`// `, bmFuncName, ` Register the fiber route`)
 		t.P(`func `, bmFuncName, fmt.Sprintf(`(e *fiber.App, server %sFiberServer, w func(c *fiber.Ctx, message proto.Message) error , v func(message proto.Message) error) {`, utils.CamelCase(servName)))
 		t.P(svcName, ` = server`)
-		t.P(fmt.Sprintf(`	%Writer = w`, utils.CamelCase(servName)))
+		t.P(fmt.Sprintf(`	%sWriter = w`, utils.CamelCase(servName)))
 		t.P(fmt.Sprintf(`	%sValidater = v`, utils.CamelCase(servName)))
 		for _, methInfo := range methList {
 			t.P(`e.`, helper.UcFirst(strings.ToLower(methInfo.apiInfo.HttpMethod)), `("`, methInfo.apiInfo.NewPath, `",`, methInfo.routeFuncName, ` )`)
