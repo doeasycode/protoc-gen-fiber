@@ -75,14 +75,17 @@ func (t *bm) generateForFile(file *descriptor.FileDescriptorProto) *plugin.CodeG
 func (t *bm) generatePathConstants(file *descriptor.FileDescriptorProto) {
 	t.P()
 	for _, service := range file.Service {
-		name := naming.ServiceName(service)
+		//name := naming.ServiceName(service)
+		t.P("var (")
 		for _, method := range service.Method {
 			if !t.ShouldGenForMethod(file, service, method) {
 				continue
 			}
 			apiInfo := t.GetHttpInfoCached(file, service, method)
-			t.P(`var Path`, name, naming.MethodName(method), ` = "`, apiInfo.Path, `"`)
+			name := helper.Camelize(strings.Replace(apiInfo.Path, "/", "_", -1))
+			t.P(`	Path`, name, ` = "`, apiInfo.Path, `"`)
 		}
+		t.P(")")
 		t.P()
 	}
 }
@@ -318,7 +321,7 @@ func (t *bm) generateBMInterface(file *descriptor.FileDescriptorProto, service *
 		}
 		count++
 		t.generateInterfaceMethod(file, service, method, comments)
-		t.P()
+		//t.P()
 	}
 	t.P(`}`)
 	return count
