@@ -2,7 +2,7 @@ package generator
 
 import (
 	"fmt"
-	"protoc-gen-fiber/generator/helper"
+	"github.com/doeasycode/protoc-gen-fiber/generator/helper"
 	"reflect"
 	"sort"
 	"strings"

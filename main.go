@@ -3,11 +3,11 @@ package main
 import (
 	"flag"
 	"fmt"
+	"github.com/doeasycode/protoc-gen-fiber/generator/tool/gen"
+	"github.com/doeasycode/protoc-gen-fiber/generator/tool/generator"
 	"os"
-	"protoc-gen-fiber/generator/tool/gen"
-	"protoc-gen-fiber/generator/tool/generator"
 
-	bmgen "protoc-gen-fiber/generator/bm"
+	bmgen "github.com/doeasycode/protoc-gen-fiber/generator/bm"
 )
 
 func main() {

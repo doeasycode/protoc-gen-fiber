@@ -1,4 +1,4 @@
-module protoc-gen-fiber
+module github.com/doeasycode/protoc-gen-fiber
 
 go 1.16
 
@@ -9,5 +9,5 @@ require (
 	github.com/pkg/errors v0.9.1
 	golang.org/x/text v0.4.0
 	google.golang.org/genproto v0.0.0-20220107163113-42d7afdf6368
-	google.golang.org/protobuf v1.28.1
+	google.golang.org/protobuf v1.28.1 // indirect
 )

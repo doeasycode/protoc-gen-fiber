@@ -2,10 +2,10 @@ package gen
 
 import (
 	"encoding/json"
+	"github.com/doeasycode/protoc-gen-fiber/generator/helper"
 	"io"
 	"log"
 	"os"
-	"protoc-gen-fiber/generator/helper"
 	"strings"
 
 	"github.com/golang/protobuf/proto"
