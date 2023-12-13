@@ -6,7 +6,6 @@ import (
 	"github.com/doeasycode/protoc-gen-fiber/generator/helper"
 	"google.golang.org/genproto/googleapis/api/annotations"
 	"log"
-	"os"
 	"reflect"
 	"sort"
 	"strings"
@@ -100,7 +99,7 @@ func (t *bm) generatePathConstants(file *descriptor.FileDescriptorProto) {
 	}
 	marshal, _ := json.Marshal(httpMaps)
 	log.Println("httpMaps marshal:", string(marshal))
-	os.Exit(-1)
+	//os.Exit(-1)
 }
 
 func (t *bm) generateFileHeader(file *descriptor.FileDescriptorProto, pkgName string) {
