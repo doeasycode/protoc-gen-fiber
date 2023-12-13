@@ -1,8 +1,12 @@
 package generator
 
 import (
+	"encoding/json"
 	"fmt"
 	"github.com/doeasycode/protoc-gen-fiber/generator/helper"
+	"google.golang.org/genproto/googleapis/api/annotations"
+	"log"
+	"os"
 	"reflect"
 	"sort"
 	"strings"
@@ -74,6 +78,8 @@ func (t *bm) generateForFile(file *descriptor.FileDescriptorProto) *plugin.CodeG
 
 func (t *bm) generatePathConstants(file *descriptor.FileDescriptorProto) {
 	t.P()
+
+	httpMaps := make(map[string]*HTTPInfo)
 	for _, service := range file.Service {
 		//name := naming.ServiceName(service)
 		t.P("var (")
@@ -81,6 +87,10 @@ func (t *bm) generatePathConstants(file *descriptor.FileDescriptorProto) {
 			if !t.ShouldGenForMethod(file, service, method) {
 				continue
 			}
+
+			httpInfo := t.getHTTPInfo(file, service, method)
+			httpMaps[method.GetName()] = httpInfo
+
 			apiInfo := t.GetHttpInfoCached(file, service, method)
 			name := helper.Camelize(strings.Replace(apiInfo.Path, "/", "_", -1))
 			t.P(`	Path`, name, ` = "`, apiInfo.Path, `"`)
@@ -88,6 +98,9 @@ func (t *bm) generatePathConstants(file *descriptor.FileDescriptorProto) {
 		t.P(")")
 		t.P()
 	}
+	marshal, _ := json.Marshal(httpMaps)
+	log.Println("httpMaps marshal:", string(marshal))
+	os.Exit(-1)
 }
 
 func (t *bm) generateFileHeader(file *descriptor.FileDescriptorProto, pkgName string) {
@@ -376,4 +389,89 @@ func getValidateComment(field *descriptor.FieldDescriptorProto) string {
 	//	validateTag = re.ReplaceAllString(validateTag, "")
 	//}
 	return validateTag
+}
+
+func (t *bm) getHTTPInfo(file *descriptor.FileDescriptorProto, service *descriptor.ServiceDescriptorProto, method *descriptor.MethodDescriptorProto) *HTTPInfo {
+	var (
+		title            string
+		desc             string
+		httpMethod       string
+		newPath          string
+		explicitHTTPPath bool
+	)
+	comment, _ := t.Reg.MethodComments(file, service, method)
+	tags := tag.GetTagsInComment(comment.Leading)
+	cleanComments := tag.GetCommentWithoutTag(comment.Leading)
+	if len(cleanComments) > 0 {
+		title = strings.Trim(cleanComments[0], "\n\r ")
+		if len(cleanComments) > 1 {
+			descLines := cleanComments[1:]
+			desc = strings.Trim(strings.Join(descLines, "\n"), "\r\n ")
+		} else {
+			desc = ""
+		}
+	} else {
+		title = ""
+	}
+	googleOptionInfo, err := generator.ParseBMMethod(method)
+	if err == nil {
+		httpMethod = strings.ToUpper(googleOptionInfo.Method)
+		p := googleOptionInfo.PathPattern
+		if p != "" {
+			explicitHTTPPath = true
+			newPath = p
+			goto END
+		}
+	}
+
+	if httpMethod == "" {
+		// resolve http method
+		httpMethod = tag.GetTagValue("method", tags)
+		if httpMethod == "" {
+			httpMethod = "GET"
+		} else {
+			httpMethod = strings.ToUpper(httpMethod)
+		}
+	}
+
+	newPath = "/" + file.GetPackage() + "." + service.GetName() + "/" + method.GetName()
+END:
+	var p = newPath
+	param := &HTTPInfo{HttpMethod: httpMethod,
+		Path:                p,
+		NewPath:             newPath,
+		IsLegacyPath:        false,
+		Title:               title,
+		Description:         desc,
+		HasExplicitHTTPPath: explicitHTTPPath,
+		GoogleOptionInfo: GoogleMethodOptionInfo{
+			Method:      googleOptionInfo.Method,
+			PathPattern: googleOptionInfo.PathPattern,
+			HTTPRule:    googleOptionInfo.HTTPRule,
+		},
+	}
+	if title == "" {
+		param.Title = param.Path
+	}
+	return param
+}
+
+// HTTPInfo http info for method
+type HTTPInfo struct {
+	HttpMethod   string
+	Path         string
+	LegacyPath   string
+	NewPath      string
+	IsLegacyPath bool
+	Title        string
+	Description  string
+	// is http path added in the google.api.http option ?
+	HasExplicitHTTPPath bool
+	GoogleOptionInfo    GoogleMethodOptionInfo
+}
+
+type GoogleMethodOptionInfo struct {
+	Method      string
+	PathPattern string
+	HTTPRule    *annotations.HttpRule
 }
