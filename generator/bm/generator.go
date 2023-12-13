@@ -412,8 +412,14 @@ func (t *bm) getHTTPInfo(file *descriptor.FileDescriptorProto, service *descript
 	} else {
 		title = ""
 	}
+	var _googleOptionInfo *GoogleMethodOptionInfo
 	googleOptionInfo, err := generator.ParseBMMethod(method)
 	if err == nil {
+		_googleOptionInfo = &GoogleMethodOptionInfo{
+			Method:      googleOptionInfo.Method,
+			PathPattern: googleOptionInfo.PathPattern,
+			HTTPRule:    googleOptionInfo.HTTPRule,
+		}
 		httpMethod = strings.ToUpper(googleOptionInfo.Method)
 		p := googleOptionInfo.PathPattern
 		if p != "" {
@@ -443,11 +449,7 @@ END:
 		Title:               title,
 		Description:         desc,
 		HasExplicitHTTPPath: explicitHTTPPath,
-		GoogleOptionInfo: GoogleMethodOptionInfo{
-			Method:      googleOptionInfo.Method,
-			PathPattern: googleOptionInfo.PathPattern,
-			HTTPRule:    googleOptionInfo.HTTPRule,
-		},
+		GoogleOptionInfo:    _googleOptionInfo,
 	}
 	if title == "" {
 		param.Title = param.Path
@@ -466,7 +468,7 @@ type HTTPInfo struct {
 	Description  string
 	// is http path added in the google.api.http option ?
 	HasExplicitHTTPPath bool
-	GoogleOptionInfo    GoogleMethodOptionInfo
+	GoogleOptionInfo    *GoogleMethodOptionInfo
 }
 
 type GoogleMethodOptionInfo struct {
