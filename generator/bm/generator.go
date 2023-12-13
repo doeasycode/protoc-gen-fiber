@@ -1,13 +1,10 @@
 package generator
 
 import (
-	"encoding/json"
 	"fmt"
 	"github.com/doeasycode/protoc-gen-fiber/generator/helper"
 	"google.golang.org/genproto/googleapis/api/annotations"
-	"log"
 	"reflect"
-	"sort"
 	"strings"
 
 	"github.com/golang/protobuf/proto"
@@ -24,6 +21,7 @@ import (
 type bm struct {
 	generator.Base
 	filesHandled int
+	httpRoutes   map[string][]*HTTPInfo
 }
 
 // BmGenerator BM generator.
@@ -78,7 +76,7 @@ func (t *bm) generateForFile(file *descriptor.FileDescriptorProto) *plugin.CodeG
 func (t *bm) generatePathConstants(file *descriptor.FileDescriptorProto) {
 	t.P()
 
-	httpMaps := make(map[string]*HTTPInfo)
+	httpRoutes := make(map[string][]*HTTPInfo)
 	for _, service := range file.Service {
 		//name := naming.ServiceName(service)
 		t.P("var (")
@@ -88,17 +86,61 @@ func (t *bm) generatePathConstants(file *descriptor.FileDescriptorProto) {
 			}
 
 			httpInfo := t.getHTTPInfo(file, service, method)
-			httpMaps[method.GetName()] = httpInfo
+			//httpMaps[file.GetPackage()+service.GetName()+method.GetName()] = httpInfo
+			//apiInfo := t.GetHttpInfoCached(file, service, method)
+			name := strings.Replace(httpInfo.Path, "/", "_", -1)
+			name = strings.Replace(name, ".", "_", -1)
+			t.P(`	Path`, helper.Camelize(name), ` = "`, httpInfo.Path, `"`)
 
-			apiInfo := t.GetHttpInfoCached(file, service, method)
-			name := helper.Camelize(strings.Replace(apiInfo.Path, "/", "_", -1))
-			t.P(`	Path`, name, ` = "`, apiInfo.Path, `"`)
+			k := file.GetPackage() + service.GetName() + method.GetName()
+			httpRoutes[k] = append(httpRoutes[k], &HTTPInfo{
+				HttpMethod:          httpInfo.HttpMethod,
+				Path:                httpInfo.Path,
+				LegacyPath:          httpInfo.LegacyPath,
+				NewPath:             httpInfo.NewPath,
+				IsLegacyPath:        httpInfo.IsLegacyPath,
+				Title:               httpInfo.Title,
+				Description:         httpInfo.Description,
+				HasExplicitHTTPPath: httpInfo.HasExplicitHTTPPath,
+				GoogleOptionInfo:    nil,
+			})
+
+			if httpInfo.HasExplicitHTTPPath && httpInfo.GoogleOptionInfo != nil {
+				if len(httpInfo.GoogleOptionInfo.HTTPRule.AdditionalBindings) > 0 {
+					for _, binding := range httpInfo.GoogleOptionInfo.HTTPRule.AdditionalBindings {
+						bindingHttpInfo := &HTTPInfo{
+							LegacyPath:          httpInfo.LegacyPath,
+							IsLegacyPath:        httpInfo.IsLegacyPath,
+							Title:               httpInfo.Title,
+							Description:         httpInfo.Description,
+							HasExplicitHTTPPath: httpInfo.HasExplicitHTTPPath,
+							GoogleOptionInfo:    nil,
+						}
+
+						get := binding.GetGet()
+						if get != "" {
+							bindingHttpInfo.HttpMethod = "GET"
+							bindingHttpInfo.Path = binding.GetPattern().(*annotations.HttpRule_Get).Get
+						}
+
+						post := binding.GetPost()
+						if post != "" {
+							bindingHttpInfo.HttpMethod = "POST"
+							bindingHttpInfo.Path = binding.GetPattern().(*annotations.HttpRule_Post).Post
+						}
+						bindingHttpInfo.NewPath = bindingHttpInfo.Path
+						httpRoutes[k] = append(httpRoutes[k], bindingHttpInfo)
+					}
+				}
+			}
+
 		}
 		t.P(")")
 		t.P()
 	}
-	marshal, _ := json.Marshal(httpMaps)
-	log.Println("httpMaps marshal:", string(marshal))
+	t.httpRoutes = httpRoutes
+	//marshal, _ := json.Marshal(httpRoutes)
+	//log.Println("httpMaps marshal:", string(marshal))
 	//os.Exit(-1)
 }
 
@@ -163,10 +205,7 @@ func (t *bm) sectionComment(sectionTitle string) {
 	t.P()
 }
 
-func (t *bm) generateBMRoute(
-	file *descriptor.FileDescriptorProto,
-	service *descriptor.ServiceDescriptorProto,
-	index int, validateComment map[string]string) {
+func (t *bm) generateBMRoute(file *descriptor.FileDescriptorProto, service *descriptor.ServiceDescriptorProto, index int, validateComment map[string]string) {
 	// old mode is generate xx.route.go in the http pkg
 	// new mode is generate route code in the same .bm.go
 	// route rule /x{department}/{project-name}/{path_prefix}/method_name
@@ -181,38 +220,14 @@ func (t *bm) generateBMRoute(
 	t.P(`	`, servName, `Validater`, ` func(message proto.Message) error`)
 	t.P(`)`)
 
-	type methodInfo struct {
-		midwares      []string
-		routeFuncName string
-		apiInfo       *generator.HTTPInfo
-		methodName    string
-	}
-	var methList []methodInfo
-	var allMidwareMap = make(map[string]bool)
-	var isLegacyPkg = false
 	for _, method := range service.Method {
 		if !t.ShouldGenForMethod(file, service, method) {
 			continue
 		}
-		var midwares []string
 		comments, _ := t.Reg.MethodComments(file, service, method)
 		tags := tag.GetTagsInComment(comments.Leading)
 		if tag.GetTagValue("dynamic", tags) == "true" {
 			continue
-		}
-		apiInfo := t.GetHttpInfoCached(file, service, method)
-		isLegacyPkg = apiInfo.IsLegacyPath
-		//httpMethod, legacyPath, path := getHttpInfo(file, service, method, t.reg)
-		//if legacyPath != "" {
-		//	isLegacyPkg = true
-		//}
-
-		midStr := tag.GetTagValue("midware", tags)
-		if midStr != "" {
-			midwares = strings.Split(midStr, ",")
-			for _, m := range midwares {
-				allMidwareMap[m] = true
-			}
 		}
 
 		methName := naming.MethodName(method)
@@ -226,75 +241,53 @@ func (t *bm) generateBMRoute(
 			}
 		}
 
-		routeName := utils.LcFirst(utils.CamelCase(servName) +
-			utils.CamelCase(methName))
+		httpRoutes := t.httpRoutes[file.GetPackage()+service.GetName()+method.GetName()]
 
-		methList = append(methList, methodInfo{
-			apiInfo:       apiInfo,
-			midwares:      midwares,
-			routeFuncName: routeName,
-			methodName:    method.GetName(),
-		})
+		if len(httpRoutes) > 0 {
 
-		t.P(fmt.Sprintf("func %s (c *fiber.Ctx) error {", routeName))
-		t.P(`	p := new(`, inputType, `)`)
-		t.P("	if err := c.BodyParser(p); err != nil {")
-		t.P("		return err")
-		t.P("	}")
+			for i, route := range httpRoutes {
 
-		if needVaild {
-			t.P(fmt.Sprintf("	if err := %sValidater(p); err != nil {", utils.CamelCase(servName)))
-			t.P("		return err")
-			t.P("	}")
-		}
+				parseName := "BodyParser"
+				if route.HttpMethod == "GET" {
+					parseName = "QueryParser"
+				}
+				//_Greeter_SayHello0_HTTP_Handler
+				handlerName := fmt.Sprintf("_%s_%s%d_HTTP_Handler", utils.CamelCase(servName), utils.CamelCase(methName), i)
+				t.P(fmt.Sprintf("func %s (c *fiber.Ctx) error {", handlerName))
+				t.P(`	p := new(`, inputType, `)`)
+				t.P("	if err := c." + parseName + "(p); err != nil {")
+				t.P("		return err")
+				t.P("	}")
 
-		t.P(fmt.Sprintf("	resp, err := %sSvc.%s(c.UserContext(), p)", utils.CamelCase(servName), methName))
-		t.P("	if err != nil {")
-		t.P("		return err")
-		t.P("	}")
-		t.P(fmt.Sprintf("	return %sWriter(c,resp)", utils.CamelCase(servName)))
-		t.P("}")
-	}
+				if needVaild {
+					t.P(fmt.Sprintf("	if err := %sValidater(p); err != nil {", utils.CamelCase(servName)))
+					t.P("		return err")
+					t.P("	}")
+				}
 
-	// 注册老的路由的方法
-	if isLegacyPkg {
-		funcName := `Register` + utils.CamelCase(versionPrefix) + servName + `Service`
-		t.P(`// `, funcName, ` Register the blademaster route with middleware map`)
-		t.P(`// midMap is the middleware map, the key is defined in proto`)
-		t.P(`func `, funcName, `(e *bm.Engine, svc `, servName, "BMServer, midMap map[string]bm.HandlerFunc)", ` {`)
-		var keys []string
-		for m := range allMidwareMap {
-			keys = append(keys, m)
-		}
-		// to keep generated code consistent
-		sort.Strings(keys)
-		for _, m := range keys {
-			t.P(m, ` := midMap["`, m, `"]`)
-		}
-
-		t.P(svcName, ` = svc`)
-		for _, methInfo := range methList {
-			var midArgStr string
-			if len(methInfo.midwares) == 0 {
-				midArgStr = ""
-			} else {
-				midArgStr = strings.Join(methInfo.midwares, ", ") + ", "
+				t.P(fmt.Sprintf("	resp, err := %sSvc.%s(c.UserContext(), p)", utils.CamelCase(servName), methName))
+				t.P("	if err != nil {")
+				t.P("		return err")
+				t.P("	}")
+				t.P(fmt.Sprintf("	return %sWriter(c,resp)", utils.CamelCase(servName)))
+				t.P("}")
 			}
-			t.P(`e.`, helper.UcFirst(strings.ToLower(methInfo.apiInfo.HttpMethod)), `("`, methInfo.apiInfo.LegacyPath, `", `, midArgStr, methInfo.routeFuncName, `)`)
+
+			var bmFuncName = fmt.Sprintf("Register%sFiberServer", servName)
+			t.P(`// `, bmFuncName, ` Register the fiber route`)
+			t.P(`func `, bmFuncName, fmt.Sprintf(`(e *fiber.App, server %sFiberServer, w func(c *fiber.Ctx, message proto.Message) error , v func(message proto.Message) error) {`, utils.CamelCase(servName)))
+			t.P(svcName, ` = server`)
+			t.P(fmt.Sprintf(`	%sWriter = w`, utils.CamelCase(servName)))
+			t.P(fmt.Sprintf(`	%sValidater = v`, utils.CamelCase(servName)))
+
+			for i, route := range httpRoutes {
+				handlerName := fmt.Sprintf("_%s_%s%d_HTTP_Handler", utils.CamelCase(servName), utils.CamelCase(methName), i)
+				t.P(`e.`, helper.UcFirst(strings.ToLower(route.HttpMethod)), `("`, route.NewPath, `",`, handlerName, ` )`)
+			}
+			t.P(`	}`)
+
 		}
-		t.P(`	}`)
-	} else {
-		// 新的注册路由的方法
-		var bmFuncName = fmt.Sprintf("Register%sFiberServer", servName)
-		t.P(`// `, bmFuncName, ` Register the fiber route`)
-		t.P(`func `, bmFuncName, fmt.Sprintf(`(e *fiber.App, server %sFiberServer, w func(c *fiber.Ctx, message proto.Message) error , v func(message proto.Message) error) {`, utils.CamelCase(servName)))
-		t.P(svcName, ` = server`)
-		t.P(fmt.Sprintf(`	%sWriter = w`, utils.CamelCase(servName)))
-		t.P(fmt.Sprintf(`	%sValidater = v`, utils.CamelCase(servName)))
-		for _, methInfo := range methList {
-			t.P(`e.`, helper.UcFirst(strings.ToLower(methInfo.apiInfo.HttpMethod)), `("`, methInfo.apiInfo.NewPath, `",`, methInfo.routeFuncName, ` )`)
-		}
-		t.P(`	}`)
+
 	}
 }
 
