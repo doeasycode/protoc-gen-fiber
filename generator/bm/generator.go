@@ -271,24 +271,30 @@ func (t *bm) generateBMRoute(file *descriptor.FileDescriptorProto, service *desc
 				t.P("	}")
 				t.P(fmt.Sprintf("	return %sWriter(c,resp)", utils.CamelCase(servName)))
 				t.P("}")
+				t.P()
 			}
+		}
+	}
 
-			var bmFuncName = fmt.Sprintf("Register%sFiberServer", servName)
-			t.P(`// `, bmFuncName, ` Register the fiber route`)
-			t.P(`func `, bmFuncName, fmt.Sprintf(`(e *fiber.App, server %sFiberServer, w func(c *fiber.Ctx, message proto.Message) error , v func(message proto.Message) error) {`, utils.CamelCase(servName)))
-			t.P(svcName, ` = server`)
-			t.P(fmt.Sprintf(`	%sWriter = w`, utils.CamelCase(servName)))
-			t.P(fmt.Sprintf(`	%sValidater = v`, utils.CamelCase(servName)))
+	var bmFuncName = fmt.Sprintf("Register%sFiberServer", servName)
+	t.P(`// `, bmFuncName, ` Register the fiber route`)
+	t.P(`func `, bmFuncName, fmt.Sprintf(`(e *fiber.App, server %sFiberServer, w func(c *fiber.Ctx, message proto.Message) error , v func(message proto.Message) error) {`, utils.CamelCase(servName)))
+	t.P(svcName, ` = server`)
+	t.P(fmt.Sprintf(`	%sWriter = w`, utils.CamelCase(servName)))
+	t.P(fmt.Sprintf(`	%sValidater = v`, utils.CamelCase(servName)))
 
+	for _, method := range service.Method {
+
+		methName := naming.MethodName(method)
+		httpRoutes := t.httpRoutes[file.GetPackage()+service.GetName()+method.GetName()]
+		if len(httpRoutes) > 0 {
 			for i, route := range httpRoutes {
 				handlerName := fmt.Sprintf("_%s_%s%d_HTTP_Handler", utils.CamelCase(servName), utils.CamelCase(methName), i)
 				t.P(`e.`, helper.UcFirst(strings.ToLower(route.HttpMethod)), `("`, route.NewPath, `",`, handlerName, ` )`)
 			}
-			t.P(`	}`)
-
 		}
-
 	}
+	t.P(`}`)
 }
 
 func (t *bm) hasHeaderTag(md *typemap.MessageDefinition) bool {
