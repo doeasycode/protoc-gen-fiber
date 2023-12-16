@@ -56,6 +56,8 @@ func (t *bm) generateForFile(file *descriptor.FileDescriptorProto) *plugin.CodeG
 		}
 	}
 
+	//log.Println("validateComment = ", validateComment)
+
 	t.generateFileHeader(file, t.GenPkgName)
 	t.generateImports(file)
 	t.generatePathConstants(file)
@@ -236,9 +238,8 @@ func (t *bm) generateBMRoute(file *descriptor.FileDescriptorProto, service *desc
 		needVaild := false
 
 		if v, ok := validateComment[inputType]; ok {
-			if v == "required" {
+			if strings.Contains(v, "required") {
 				needVaild = true
-				break
 			}
 		}
 
