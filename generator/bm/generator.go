@@ -238,6 +238,7 @@ func (t *bm) generateBMRoute(file *descriptor.FileDescriptorProto, service *desc
 		needVaild := false
 
 		if v, ok := validateComment[inputType]; ok {
+			//log.Println("v = ", v)
 			if strings.Contains(v, "required") {
 				needVaild = true
 			}
