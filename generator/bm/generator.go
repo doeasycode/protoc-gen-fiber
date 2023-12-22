@@ -52,7 +52,11 @@ func (t *bm) generateForFile(file *descriptor.FileDescriptorProto) *plugin.CodeG
 	for _, i2 := range file.MessageType {
 		for _, i3 := range i2.Field {
 			comment := getValidateComment(i3)
-			validateComment[i2.GetName()] = comment
+			//log.Println("i2.GetName() = ", i2.GetName(), " comment = ", comment)
+			if validateComment[i2.GetName()] == "" {
+				validateComment[i2.GetName()] = comment
+				break
+			}
 		}
 	}
 
@@ -378,8 +382,9 @@ func getValidateComment(field *descriptor.FieldDescriptorProto) string {
 	if moretags != nil {
 		tags = []reflect.StructTag{reflect.StructTag(*moretags)}
 	}
+	//log.Println("tags = ", tags)
 	validateTag := tag.GetTagValue("validate", tags)
-
+	//log.Println("validateTag = ", validateTag)
 	//// trim
 	//regStr := []string{
 	//	"required *,*",
