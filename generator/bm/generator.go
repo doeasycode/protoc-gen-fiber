@@ -52,11 +52,15 @@ func (t *bm) generateForFile(file *descriptor.FileDescriptorProto) *plugin.CodeG
 	for _, i2 := range file.MessageType {
 		for _, i3 := range i2.Field {
 			comment := getValidateComment(i3)
-			//log.Println("i2.GetName() = ", i2.GetName(), " comment = ", comment)
-			if validateComment[i2.GetName()] == "" {
+			if comment != "" {
 				validateComment[i2.GetName()] = comment
 				break
 			}
+			//log.Println("i2.GetName() = ", i2.GetName(), " comment = ", comment)
+			//if validateComment[i2.GetName()] == "" {
+			//
+			//
+			//}
 		}
 	}
 
