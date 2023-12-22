@@ -52,7 +52,7 @@ func (t *bm) generateForFile(file *descriptor.FileDescriptorProto) *plugin.CodeG
 	for _, i2 := range file.MessageType {
 		for _, i3 := range i2.Field {
 			comment := getValidateComment(i3)
-			if comment == "required" {
+			if comment != "" && strings.Contains(comment, "required") {
 				validateComment[i2.GetName()] = comment
 				break
 			}
